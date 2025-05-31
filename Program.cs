@@ -3,7 +3,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using System.Diagnostics;
 
 class FastImageRecreator : Form {
     static Random rand = new Random();
@@ -82,7 +81,7 @@ class FastImageRecreator : Form {
         return null;
     }
 
-    async void RunGeneration() {
+    void RunGeneration() {
         long maxDiff = original.Width * original.Height * 3L * 255;
         double lastAccuracy = 0.0;
 
