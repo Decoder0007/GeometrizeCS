@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 class FastImageRecreator : Form {
     static Random rand = new Random();
@@ -12,20 +12,30 @@ class FastImageRecreator : Form {
     static int[,] currentDiffMap;
     static long currentTotalDiff;
 
+    string filePath;
+
     PictureBox pictureBox;
     Label statusLabel;
 
-    int shapeCount = 5000;
+    Timer runtimeTimer;
+    DateTime startTime;
+
+    int shapeCount = 10000;
     int candidateCount = 250;
     int mutationCount = 300;
-    int sampleStep = 3;
-    const int Alpha = 190;
+    int sampleStep = 2;
+    const int Alpha = 204;
 
     int minShapeSize = 2;
     int maxShapeSize = 100;
 
     public FastImageRecreator() {
-        original = new Bitmap(@"C:\Users\decod\Downloads\james-cat.png");
+        filePath = AskForFile();
+        if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath)) {
+            MessageBox.Show("No valid image selected. Exiting.");
+            Environment.Exit(0);
+        }
+        original = new Bitmap(@filePath);
         canvas = new Bitmap(original.Width, original.Height, PixelFormat.Format24bppRgb);
 
         // Fill background with average color
@@ -51,12 +61,33 @@ class FastImageRecreator : Form {
         };
         Controls.Add(pictureBox);
         Controls.Add(statusLabel);
+        runtimeTimer = new Timer();
+        runtimeTimer.Interval = 10; // 0.01 second
+        runtimeTimer.Tick += (s, e) => {
+            TimeSpan elapsed = DateTime.Now - startTime;
+            //statusLabel.Text = $"Runtime: {elapsed:mm\\:ss\\:ms}";
+        };
+
         Shown += (s, e) => RunGeneration();
+    }
+
+    public string AskForFile() {
+        using (OpenFileDialog dialog = new OpenFileDialog()) {
+            dialog.Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp";
+            dialog.Title = "Select an image to recreate";
+            if (dialog.ShowDialog() == DialogResult.OK) {
+                return dialog.FileName;
+            }
+        }
+        return null;
     }
 
     async void RunGeneration() {
         long maxDiff = original.Width * original.Height * 3L * 255;
         double lastAccuracy = 0.0;
+
+        startTime = DateTime.Now;
+        runtimeTimer.Start();
 
         for (int i = 0; i < shapeCount; i++) {
             Rectangle bestBounds = Rectangle.Empty;
@@ -123,7 +154,7 @@ class FastImageRecreator : Form {
                 bestPath.Dispose();
             }
 
-            if (newAccuracy - lastAccuracy < 0.0001 && maxShapeSize > 6) {
+            if (newAccuracy - lastAccuracy < 0.00001 && maxShapeSize > 6) {
                 maxShapeSize = Math.Max(minShapeSize + 1, maxShapeSize - 1);
                 Console.WriteLine($"Reduced max shape size to {maxShapeSize} due to small accuracy gain");
             }
@@ -132,11 +163,17 @@ class FastImageRecreator : Form {
 
             pictureBox.Image?.Dispose();
             pictureBox.Image = (Bitmap)canvas.Clone();
-            statusLabel.Text = $"{i + 1}/{shapeCount} - Accuracy: {newAccuracy:0.00}% (Size: {minShapeSize}-{maxShapeSize})";
+            TimeSpan elapsed = DateTime.Now - startTime;
+            statusLabel.Text = $"{i + 1}/{shapeCount} - Acc: {newAccuracy:0.00}% - Runtime: {elapsed:mm\\:ss}";
             Application.DoEvents();
         }
 
-        canvas.Save("output.jpg", ImageFormat.Jpeg);
+        // Save the output in the same path as the input with a new name
+        string outputPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(filePath),
+            System.IO.Path.GetFileNameWithoutExtension(filePath) + "_recreated.jpg");
+
+        canvas.Save(outputPath, ImageFormat.Jpeg);
+        runtimeTimer.Stop();
         MessageBox.Show("Done!");
     }
 
